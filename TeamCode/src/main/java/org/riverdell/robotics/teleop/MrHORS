@@ -1,0 +1,150 @@
+package org.riverdell.robotics.teleop;
+
+import com.qualcomm.robotcore.eventloop.opmode.LinearOpMode;
+import com.qualcomm.robotcore.eventloop.opmode.TeleOp;
+import com.qualcomm.robotcore.hardware.DcMotor;
+import com.qualcomm.robotcore.hardware.Servo;
+import com.qualcomm.robotcore.util.ElapsedTime;
+import com.qualcomm.robotcore.util.Range;
+
+/**
+ * HypnoticOpMode - Based on BadWolfOpMode, but adapted for new robot mechanisms.
+ * Refer to BadWolfOpMode for drive logic and telemetry structure.
+ */
+@TeleOp(name="Hors OpMode", group="Linear OpMode")
+public class MrHORS extends LinearOpMode {
+
+    // Drive motors
+    private ElapsedTime runtime = new ElapsedTime();
+    private DcMotor frontLeft = null;
+    private DcMotor backLeft = null;
+    private DcMotor frontRight = null;
+    private DcMotor backRight = null;
+
+    // Hypnotic-specific motors and servos
+    private DcMotor shooter = null;
+    private DcMotor turret = null;
+    private DcMotor pastaintake = null;
+
+    private Servo clawLift = null;
+    private Servo rightspin = null;
+    private Servo leftspin = null;
+    private Servo AngleRight = null;
+    private Servo AngleLeft = null;
+
+    private double speedMultiplier = 0.3; // Default drive speed
+
+    @Override
+    public void runOpMode() {
+        // Init hardware
+        frontLeft = hardwareMap.get(DcMotor.class, "frontLeft");
+        backLeft = hardwareMap.get(DcMotor.class, "backLeft");
+        frontRight = hardwareMap.get(DcMotor.class, "frontRight");
+        backRight = hardwareMap.get(DcMotor.class, "backRight");
+
+        shooter = hardwareMap.get(DcMotor.class, "shooter");
+        turret = hardwareMap.get(DcMotor.class, "turret");
+        pastaintake = hardwareMap.get(DcMotor.class, "pastaintake");
+
+        clawLift = hardwareMap.get(Servo.class, "clawLift");
+        rightspin = hardwareMap.get(Servo.class, "rightspin");
+        leftspin = hardwareMap.get(Servo.class, "leftspin");
+        AngleRight = hardwareMap.get(Servo.class, "AngleRight");
+        AngleLeft = hardwareMap.get(Servo.class, "AngleLeft");
+
+        // Set initial positions
+        AngleRight.setPosition(0.5);
+        AngleLeft.setPosition(0.5);
+        clawLift.setPosition(0.1);
+        rightspin.setPosition(0.5);
+        leftspin.setPosition(0.5);
+
+        telemetry.addData("Status", "Hypnotic Ready");
+        telemetry.update();
+
+        waitForStart();
+        runtime.reset();
+
+        boolean shooterActive = false;
+        double shooterStartTime = 0;
+
+        while (opModeIsActive()) {
+            // Speed multiplier (copy from BadWolf)
+            speedMultiplier = (gamepad1.left_trigger > 0.1 ? 1 : 0.4);
+
+            // Mecanum drive (refer BadWolfOpMode for logic)
+            double drive = -gamepad1.left_stick_y;
+            double strafe = gamepad1.left_stick_x;
+            double turn = gamepad1.right_stick_x;
+
+            double frontLeftPower = Range.clip((drive + strafe + turn) * speedMultiplier, -1.0, 1.0);
+            double frontRightPower = Range.clip((drive - strafe - turn) * speedMultiplier, -1.0, 1.0);
+            double backLeftPower = Range.clip((drive - strafe + turn) * speedMultiplier, -1.0, 1.0);
+            double backRightPower = Range.clip((drive + strafe - turn) * speedMultiplier, -1.0, 1.0);
+
+            frontLeft.setPower(frontLeftPower);
+            frontRight.setPower(frontRightPower);
+            backLeft.setPower(backLeftPower);
+            backRight.setPower(backRightPower);
+
+            // Shooter & claw sequence
+            if (gamepad1.right_trigger > 0.2) {
+                shooter.setPower(0.67);
+                if (!shooterActive) {
+                    shooterActive = true;
+                    shooterStartTime = runtime.seconds();
+                }
+            } else {
+                shooter.setPower(0.0);
+                shooterActive = false;
+            }
+
+            if (shooterActive) {
+                if (runtime.seconds() - shooterStartTime >= 5.0) {
+                    clawLift.setPosition(0.9);
+                    // After 1s, return
+                    if (runtime.seconds() - shooterStartTime >= 6.0) {
+                        clawLift.setPosition(0.1);
+                        shooterActive = false; // End sequence
+                    }
+                }
+            }
+
+            // Angle control with bumpers (right bumper increases right angle, left bumper increases left angle)
+            if (gamepad1.right_bumper) {
+                AngleRight.setPosition(0.2);
+                AngleLeft.setPosition(0.8);
+            } else if (gamepad1.left_bumper) {
+                AngleRight.setPosition(0.9);
+                AngleLeft.setPosition(0.1);
+            } else {
+                AngleRight.setPosition(0.5);
+                AngleLeft.setPosition(0.5);
+            }
+
+            // Intake control
+            if (gamepad1.dpad_down) {
+                pastaintake.setPower(1.0);
+            } else if (gamepad1.dpad_up) {
+                pastaintake.setPower(0.0);
+            }
+
+            // Shooter spin servo control (button Y)
+            if (gamepad1.y) {
+                rightspin.setPosition(0.2);
+                leftspin.setPosition(0.8);
+            } else {
+                rightspin.setPosition(0.5);
+                leftspin.setPosition(0.5);
+            }
+
+            telemetry.addData("Status", "Run Time: " + runtime.toString());
+            telemetry.addData("Shooter Power", shooter.getPower());
+            telemetry.addData("ClawLift Pos", clawLift.getPosition());
+            telemetry.addData("AngleRight", AngleRight.getPosition());
+            telemetry.addData("AngleLeft", AngleLeft.getPosition());
+            telemetry.addData("Intake Power", pastaintake.getPower());
+            telemetry.update();
+        }
+    }
+}
